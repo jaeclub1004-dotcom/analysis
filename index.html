@@ -322,8 +322,11 @@ textarea:focus{outline:none;border-color:#339af0}
     <button class="btn bsm" style="background:#FF9800;color:#fff;font-weight:600" onclick="saveRawData()">💾 raw data 저장</button>
     <button class="btn bsm" style="background:#9C27B0;color:#fff;font-weight:600" onclick="document.getElementById('loadDataFile').click()">📂 데이터 불러오기</button>
     <input type="file" id="loadDataFile" accept=".json" style="display:none" onchange="loadRawData(event)"/>
+    <button class="btn bsm" style="background:#00B894;color:#fff;font-weight:600" onclick="serverSave()">🌐 서버 저장</button>
+    <button class="btn bsm" style="background:#0984E3;color:#fff;font-weight:600" onclick="serverLoad()">🌐 서버 불러오기</button>
     <button class="btn bo bsm" onclick="showHistory()">📁 저장된 이력</button>
     <button class="btn bo bsm" onclick="openLineManager()">📋 라인 관리</button>
+    <button class="btn bo bsm" onclick="showGitHubSettings()" style="font-size:0.72rem">⚙️ 서버설정</button>
     <div id="pI" style="font-size:0.78rem;color:#555;margin-left:8px"></div>
   </div>
   <div id="results" class="hd">
@@ -1815,6 +1818,119 @@ function saveRawData(){
   var a=document.createElement("a");a.href=url;a.download=filename;
   document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
   alert("raw data 저장 완료: "+filename+" ("+src.length+"건)");
+}
+
+function showGitHubSettings(){
+  var token=localStorage.getItem("gh_token")||"";
+  var repo=localStorage.getItem("gh_repo")||"jaeclub1004-dotcom/analysis";
+  var branch=localStorage.getItem("gh_branch")||"main";
+  var h='<div style="padding:16px;color:#222">';
+  h+='<p style="margin-bottom:12px;font-size:0.85rem">GitHub 레포에 데이터를 저장하여 다른 사용자도 열람할 수 있습니다.</p>';
+  h+='<div style="margin-bottom:10px"><label style="font-weight:600;font-size:0.82rem">🔑 GitHub 토큰:</label><br/>';
+  h+='<input type="password" id="ghTokenInput" value="'+esc(token)+'" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;margin-top:4px;font-size:0.8rem" placeholder="ghp_xxxxxxxxxxxx"/></div>';
+  h+='<div style="margin-bottom:10px"><label style="font-weight:600;font-size:0.82rem">📦 레포:</label><br/>';
+  h+='<input type="text" id="ghRepoInput" value="'+esc(repo)+'" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;margin-top:4px;font-size:0.8rem"/></div>';
+  h+='<div style="margin-bottom:10px"><label style="font-weight:600;font-size:0.82rem">🌿 브랜치:</label><br/>';
+  h+='<input type="text" id="ghBranchInput" value="'+esc(branch)+'" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;margin-top:4px;font-size:0.8rem"/></div>';
+  h+='<p style="font-size:0.75rem;color:#666;margin-bottom:12px">토큰 발급: GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens → 새 토큰 생성 (Contents: Read/write 권한)</p>';
+  h+='<button class="btn bp" onclick="saveGitHubSettings()">💾 설정 저장</button>';
+  h+='</div>';
+  document.getElementById("k_modalTitle").innerHTML="⚙️ 서버 설정";
+  document.getElementById("k_modalContent").innerHTML=h;
+  document.getElementById("k_modalOverlay").classList.add("show");
+}
+
+function saveGitHubSettings(){
+  localStorage.setItem("gh_token",document.getElementById("ghTokenInput").value);
+  localStorage.setItem("gh_repo",document.getElementById("ghRepoInput").value);
+  localStorage.setItem("gh_branch",document.getElementById("ghBranchInput").value);
+  b_closeModal();
+  alert("설정이 저장되었습니다.");
+}
+
+function esc(s){return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+
+async function serverSave(){
+  var token=localStorage.getItem("gh_token");
+  var repo=localStorage.getItem("gh_repo")||"jaeclub1004-dotcom/analysis";
+  var branch=localStorage.getItem("gh_branch")||"main";
+  if(!token){alert("⚙️ 서버설정에서 GitHub 토큰을 입력하세요.");return;}
+  var src=window.ALL_AI||AI;
+  if(!src||!src.length){alert("저장할 데이터가 없습니다.");return;}
+  var dateFrom=document.getElementById("fDateFrom")?document.getElementById("fDateFrom").value:"";
+  var dateTo=document.getElementById("fDateTo")?document.getElementById("fDateTo").value:"";
+  var data={
+    exportDate:new Date().toISOString(),
+    dateRange:{from:dateFrom,to:dateTo},
+    totalIssues:src.length,
+    data:src.map(function(i){
+      return {d:i.d,t:i.t,s:i.s,c:i.c,l:i.l,cat:i.cat,hr:i.hr,wh:i.wh,ca:i.ca,ac:i.ac,r:i.r,rm:i.rm,rt:i.rt,du:i.du,st:i.st,alarmTypes:i.alarmTypes,actionTypes:i.actionTypes};
+    })
+  };
+  var jsonStr=JSON.stringify(data);
+  var encoded=unescape(encodeURIComponent(jsonStr));
+  var base64=btoa(encoded);
+  var filename="shared_"+new Date().toISOString().slice(0,10).replace(/-/g,"")+".json";
+  try{
+    var checkResp=await fetch("https://api.github.com/repos/"+repo+"/contents/"+filename,{headers:{"Authorization":"token "+token}});
+    var sha=null;
+    if(checkResp.ok){var existing=await checkResp.json();sha=existing.sha;}
+    var body={message:"Update analysis data",content:base64,branch:branch};
+    if(sha)body.sha=sha;
+    var resp=await fetch("https://api.github.com/repos/"+repo+"/contents/"+filename,{
+      method:"PUT",
+      headers:{"Authorization":"token "+token,"Content-Type":"application/json"},
+      body:JSON.stringify(body)
+    });
+    if(resp.ok){
+      alert("서버 저장 완료! ("+src.length+"건)\n파일: "+filename);
+    }else{
+      var err=await resp.json();
+      alert("저장 실패: "+(err.message||resp.statusText));
+    }
+  }catch(e){
+    alert("저장 실패: "+e.message);
+  }
+}
+
+async function serverLoad(){
+  var repo=localStorage.getItem("gh_repo")||"jaeclub1004-dotcom/analysis";
+  var branch=localStorage.getItem("gh_branch")||"main";
+  try{
+    var listResp=await fetch("https://api.github.com/repos/"+repo+"/contents/?ref="+branch);
+    if(!listResp.ok){alert("레포에 접근할 수 없습니다.");return;}
+    var files=await listResp.json();
+    var jsonFiles=files.filter(function(f){return f.name&&f.name.startsWith("shared_")&&f.name.endsWith(".json");});
+    if(!jsonFiles.length){alert("서버에 저장된 데이터가 없습니다.");return;}
+    jsonFiles.sort(function(a,b){return b.name.localeCompare(a.name);});
+    var latest=jsonFiles[0];
+    var rawResp=await fetch(latest.download_url);
+    var rawData=await rawResp.json();
+    if(rawData&&rawData.data&&rawData.data.length>0){
+      window.ALL_AI=rawData.data;
+      window.AI=rawData.data.slice();
+      window.AP=rawData.data.map(function(i){return{d:i.date,t:i.time,s:i.sender,c:i.content}});
+      document.getElementById("results").classList.remove("hd");
+      rr();
+      document.getElementById("pI").textContent="서버 로드: "+rawData.data.length+"건 ("+latest.name+")";
+      alert("서버에서 데이터를 불러왔습니다. ("+rawData.data.length+"건)");
+    }else{
+      alert("데이터 형식이 올바르지 않습니다.");
+    }
+  }catch(e){
+    alert("로드 실패: "+e.message);
+  }
+}
+
+async function serverLoadList(){
+  var repo=localStorage.getItem("gh_repo")||"jaeclub1004-dotcom/analysis";
+  var branch=localStorage.getItem("gh_branch")||"main";
+  try{
+    var listResp=await fetch("https://api.github.com/repos/"+repo+"/contents/?ref="+branch);
+    if(!listResp.ok){return[];}
+    var files=await listResp.json();
+    return files.filter(function(f){return f.name&&f.name.startsWith("shared_")&&f.name.endsWith(".json");}).sort(function(a,b){return b.name.localeCompare(a.name);});
+  }catch(e){return[];}
 }
 
 function closeHistory(){
