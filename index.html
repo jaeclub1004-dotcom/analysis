@@ -1048,15 +1048,11 @@ function go(){
     } else {document.getElementById("dbg").innerHTML="";}
     window.ALL_AI=AI.slice();
     rr();
-    saveToFile();
     saveHistory();
     try{
       var saveData={AP:AP.map(function(m){return{d:m.d,t:m.t,s:m.s,c:m.c}}),AI:window.ALL_AI.map(function(i){return{d:i.d,t:i.t,s:i.s,c:i.c,l:i.l,cat:i.cat,hr:i.hr,wh:i.wh,ca:i.ca,ac:i.ac,r:i.r,rm:i.rm,rt:i.rt,du:i.du,st:i.st,alarmTypes:i.alarmTypes,actionTypes:i.actionTypes}}),date:new Date().toISOString()};
       localStorage.setItem("kakao_raw_data",JSON.stringify(saveData));
-      document.getElementById("pI").textContent+=" | ✅ 자동 저장됨";
-    }catch(e){
-      document.getElementById("pI").textContent+=" | ⚠️ 저장 실패("+e.message+")";
-    }
+    }catch(e){}
   },100);
 }
 
@@ -1678,10 +1674,7 @@ function dlKakaoPPT(){
   pptx.writeFile({fileName:"카카오톡라인별분석_"+new Date().toISOString().slice(0,10)+".pptx"});
 }
 
-function saveToFile(){
-  var data={date:new Date().toISOString(),count:AP.length,issues:AI.length,data:AI};
-  localStorage.setItem("kakao_analysis_"+new Date().toISOString().slice(0,10),JSON.stringify(data));
-}
+function saveToFile(){}
 
 function saveHistory(){
   var dateFrom=document.getElementById("fDateFrom")?document.getElementById("fDateFrom").value:"";
@@ -1690,18 +1683,30 @@ function saveHistory(){
   var timeTo=document.getElementById("fTimeTo")?document.getElementById("fTimeTo").value:"";
   var pathA=document.getElementById("fPathA")?document.getElementById("fPathA").value:"";
   var pathB=document.getElementById("fPathB")?document.getElementById("fPathB").value:"";
+  var src=window.ALL_AI||AI;
+  if(!src||!src.length)return;
+  var catCount={};
+  for(var i=0;i<src.length;i++){var c=src[i].cat||"기타";catCount[c]=(catCount[c]||0)+1;}
   var data={
     date:new Date().toISOString(),
     dateFrom:dateFrom,dateTo:dateTo,timeFrom:timeFrom,timeTo:timeTo,
     fileA:pathA,fileB:pathB,
-    count:AP.length,issues:AI.length,data:AI,
-    lineCount:Object.keys(window._ls||{}).length
+    count:AP.length,issues:src.length,
+    catCount:catCount,
+    lineCount:Object.keys(window._ls||{}).length,
+    data:src.map(function(i){
+      return {d:i.d,t:i.t,s:i.s,c:i.c,l:i.l,cat:i.cat,hr:i.hr,wh:i.wh,ca:i.ca,ac:i.ac,r:i.r,rm:i.rm,rt:i.rt,du:i.du,st:i.st,alarmTypes:i.alarmTypes,actionTypes:i.actionTypes};
+    })
   };
-  var histories=JSON.parse(localStorage.getItem("kakao_histories")||"[]");
-  histories.push(data);
-  if(histories.length>50)histories=histories.slice(-50);
-  localStorage.setItem("kakao_histories",JSON.stringify(histories));
-  alert("이력이 저장되었습니다. ("+dateFrom+"~"+dateTo+" | "+AI.length+"건)");
+  try{
+    var histories=JSON.parse(localStorage.getItem("kakao_histories")||"[]");
+    histories.push(data);
+    if(histories.length>50)histories=histories.slice(-50);
+    localStorage.setItem("kakao_histories",JSON.stringify(histories));
+    document.getElementById("pI").textContent+=" | ✅ 이력 저장됨";
+  }catch(e){
+    document.getElementById("pI").textContent+=" | ⚠️ 이력 저장 실패("+e.message+")";
+  }
 }
 
 function showHistory(){
