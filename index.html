@@ -1063,9 +1063,9 @@ function rr(){
   document.getElementById("results").classList.remove("hd");
   var pp=[],ls=[],ss=[];
   for(var i=0;i<AI.length;i++){
-    if(pp.indexOf(AI[i].s)<0)pp.push(AI[i].s);
-    for(var j=0;j<AI[i].l.length;j++){if(ls.indexOf(AI[i].l[j])<0)ls.push(AI[i].l[j]);}
-    for(var j=0;j<AI[i].st.length;j++){if(ss.indexOf(AI[i].st[j])<0)ss.push(AI[i].st[j]);}
+    if(AI[i].s&&pp.indexOf(AI[i].s)<0)pp.push(AI[i].s);
+    if(AI[i].l){for(var j=0;j<AI[i].l.length;j++){if(ls.indexOf(AI[i].l[j])<0)ls.push(AI[i].l[j]);}}
+    if(AI[i].st){for(var j=0;j<AI[i].st.length;j++){if(ss.indexOf(AI[i].st[j])<0)ss.push(AI[i].st[j]);}}
   }
   pp.sort();ls.sort();ss.sort();
   var o1='<option value="">전체 라인</option>';for(var i=0;i<ls.length;i++)o1+='<option value="'+ls[i]+'">'+ls[i]+'</option>';
@@ -1898,25 +1898,26 @@ async function serverLoad(){
   var branch=localStorage.getItem("gh_branch")||"main";
   try{
     var listResp=await fetch("https://api.github.com/repos/"+repo+"/contents/?ref="+branch);
-    if(!listResp.ok){alert("레포에 접근할 수 없습니다.");return;}
+    if(!listResp.ok){alert("레포에 접근할 수 없습니다. 상태: "+listResp.status);return;}
     var files=await listResp.json();
+    if(!Array.isArray(files)){alert("레포 응답 형식 오류");return;}
     var jsonFiles=files.filter(function(f){return f.name&&f.name.startsWith("shared_")&&f.name.endsWith(".json");});
     if(!jsonFiles.length){alert("서버에 저장된 데이터가 없습니다.");return;}
     jsonFiles.sort(function(a,b){return b.name.localeCompare(a.name);});
     var latest=jsonFiles[0];
     var rawResp=await fetch(latest.download_url);
     var rawData=await rawResp.json();
-    if(rawData&&rawData.data&&rawData.data.length>0){
-      window.ALL_AI=rawData.data;
-      window.AI=rawData.data.slice();
-      window.AP=rawData.data.map(function(i){return{d:i.date,t:i.time,s:i.sender,c:i.content}});
-      document.getElementById("results").classList.remove("hd");
-      rr();
-      document.getElementById("pI").textContent="서버 로드: "+rawData.data.length+"건 ("+latest.name+")";
-      alert("서버에서 데이터를 불러왔습니다. ("+rawData.data.length+"건)");
-    }else{
-      alert("데이터 형식이 올바르지 않습니다.");
+    if(!rawData||!rawData.data||!rawData.data.length){
+      alert("데이터 형식이 올바르지 않습니다.");return;
     }
+    var loaded=rawData.data;
+    window.ALL_AI=loaded;
+    window.AI=loaded.slice();
+    window.AP=loaded.map(function(i){return{d:i.d||"",t:i.t||"",s:i.s||"",c:i.c||""}});
+    document.getElementById("results").classList.remove("hd");
+    rr();
+    document.getElementById("pI").textContent="서버 로드: "+loaded.length+"건 ("+latest.name+")";
+    alert("서버에서 데이터를 불러왔습니다. ("+loaded.length+"건)");
   }catch(e){
     alert("로드 실패: "+e.message);
   }
